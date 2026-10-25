@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Student;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class StudentController extends Controller
 {
@@ -20,14 +21,15 @@ class StudentController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:students,email',
-            'age' => 'required|integer|min:1',
-            'course' => 'required|string|max:255',
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name'  => 'required|string|max:255',
+            'email'      => 'required|email|max:255|unique:students,email',
+            'course'     => 'required|string|max:255',
+            'year_level' => 'required|integer|min:1|max:5',
         ]);
 
-        Student::create($request->all());
+        Student::create($validated);
 
         return redirect()->route('students.index')->with('success', 'Student created successfully.');
     }
@@ -44,14 +46,18 @@ class StudentController extends Controller
 
     public function update(Request $request, Student $student)
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:students,email,' . $student->id,
-            'age' => 'required|integer|min:1',
-            'course' => 'required|string|max:255',
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name'  => 'required|string|max:255',
+            'email'      => [
+                'required', 'email', 'max:255',
+                Rule::unique('students', 'email')->ignore($student->id),
+            ],
+            'course'     => 'required|string|max:255',
+            'year_level' => 'required|integer|min:1|max:5',
         ]);
 
-        $student->update($request->all());
+        $student->update($validated);
 
         return redirect()->route('students.index')->with('success', 'Student updated successfully.');
     }

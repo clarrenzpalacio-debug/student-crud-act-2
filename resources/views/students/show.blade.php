@@ -7,10 +7,11 @@
     <h1>Student Details</h1>
 
     <p><strong>ID:</strong> {{ $student->id }}</p>
-    <p><strong>Name:</strong> {{ $student->name }}</p>
+    <p><strong>First Name:</strong> {{ $student->first_name }}</p>
+    <p><strong>Last Name:</strong> {{ $student->last_name }}</p>
     <p><strong>Email:</strong> {{ $student->email }}</p>
-    <p><strong>Age:</strong> {{ $student->age }}</p>
     <p><strong>Course:</strong> {{ $student->course }}</p>
+    <p><strong>Year Level:</strong> {{ $student->year_level }}</p>
     <p><strong>Created At:</strong> {{ $student->created_at }}</p>
     <p><strong>Updated At:</strong> {{ $student->updated_at }}</p>
 

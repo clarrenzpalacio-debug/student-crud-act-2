@@ -12,56 +12,87 @@ class StudentTest extends TestCase
 
     public function test_can_view_students_list(): void
     {
-        $response = $this->get('/students');
+        Student::create([
+            'first_name' => 'John',
+            'last_name' => 'Doe',
+            'email' => 'john.list@example.com',
+            'course' => 'BSIT',
+            'year_level' => 3,
+        ]);
+
+        $response = $this->getJson('/api/students');
         $response->assertStatus(200);
-        $response->assertSee('Students CRUD');
+        $response->assertJsonCount(1);
+        $response->assertJsonFragment(['email' => 'john.list@example.com']);
     }
 
     public function test_can_create_student(): void
     {
-        $response = $this->post('/students', [
-            'name' => 'John Doe',
-            'email' => 'john@example.com',
-            'age' => 20,
-            'course' => 'Computer Science',
+        $response = $this->postJson('/api/students', [
+            'first_name' => 'John',
+            'last_name' => 'Doe',
+            'email' => 'john.create@example.com',
+            'course' => 'BSCS',
+            'year_level' => 2,
         ]);
 
-        $response->assertRedirect('/students');
-        $this->assertDatabaseHas('students', ['email' => 'john@example.com']);
+        $response->assertStatus(201);
+        $response->assertJsonFragment(['email' => 'john.create@example.com']);
+        $this->assertDatabaseHas('students', ['email' => 'john.create@example.com']);
+    }
+
+    public function test_can_show_student(): void
+    {
+        $student = Student::create([
+            'first_name' => 'Alice',
+            'last_name' => 'Smith',
+            'email' => 'alice@example.com',
+            'course' => 'BSECE',
+            'year_level' => 4,
+        ]);
+
+        $response = $this->getJson("/api/students/{$student->id}");
+        $response->assertStatus(200);
+        $response->assertJsonFragment(['email' => 'alice@example.com']);
     }
 
     public function test_can_update_student(): void
     {
         $student = Student::create([
-            'name' => 'Jane Doe',
+            'first_name' => 'Jane',
+            'last_name' => 'Doe',
             'email' => 'jane@example.com',
-            'age' => 22,
-            'course' => 'Mathematics',
+            'course' => 'BSIS',
+            'year_level' => 1,
         ]);
 
-        $response = $this->put("/students/{$student->id}", [
-            'name' => 'Jane Smith',
+        $response = $this->putJson("/api/students/{$student->id}", [
+            'first_name' => 'Jane',
+            'last_name' => 'Smith',
             'email' => 'jane.smith@example.com',
-            'age' => 23,
-            'course' => 'Applied Mathematics',
+            'course' => 'BSIS',
+            'year_level' => 2,
         ]);
 
-        $response->assertRedirect('/students');
-        $this->assertDatabaseHas('students', ['email' => 'jane.smith@example.com']);
+        $response->assertStatus(200);
+        $response->assertJsonFragment(['email' => 'jane.smith@example.com', 'year_level' => 2]);
+        $this->assertDatabaseHas('students', ['email' => 'jane.smith@example.com', 'year_level' => 2]);
     }
 
     public function test_can_delete_student(): void
     {
         $student = Student::create([
-            'name' => 'Bob Smith',
+            'first_name' => 'Bob',
+            'last_name' => 'Smith',
             'email' => 'bob@example.com',
-            'age' => 21,
-            'course' => 'Physics',
+            'course' => 'BSME',
+            'year_level' => 5,
         ]);
 
-        $response = $this->delete("/students/{$student->id}");
+        $response = $this->deleteJson("/api/students/{$student->id}");
 
-        $response->assertRedirect('/students');
+        $response->assertStatus(200);
+        $response->assertJson(['message' => 'Student record deleted successfully.']);
         $this->assertDatabaseMissing('students', ['id' => $student->id]);
     }
 }

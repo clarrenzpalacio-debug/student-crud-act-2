@@ -17,20 +17,24 @@
     <form action="{{ route('students.store') }}" method="POST">
         @csrf
         <p>
-            <label>Name:</label><br>
-            <input type="text" name="name" value="{{ old('name') }}">
+            <label>First Name:</label><br>
+            <input type="text" name="first_name" value="{{ old('first_name') }}">
+        </p>
+        <p>
+            <label>Last Name:</label><br>
+            <input type="text" name="last_name" value="{{ old('last_name') }}">
         </p>
         <p>
             <label>Email:</label><br>
             <input type="email" name="email" value="{{ old('email') }}">
         </p>
         <p>
-            <label>Age:</label><br>
-            <input type="number" name="age" value="{{ old('age') }}">
-        </p>
-        <p>
             <label>Course:</label><br>
             <input type="text" name="course" value="{{ old('course') }}">
+        </p>
+        <p>
+            <label>Year Level:</label><br>
+            <input type="number" name="year_level" min="1" max="5" value="{{ old('year_level') }}">
         </p>
         <p>
             <button type="submit">Submit</button>

@@ -18,10 +18,11 @@
         <thead>
             <tr>
                 <th>ID</th>
-                <th>Name</th>
+                <th>First Name</th>
+                <th>Last Name</th>
                 <th>Email</th>
-                <th>Age</th>
                 <th>Course</th>
+                <th>Year Level</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -29,10 +30,11 @@
             @forelse($students as $student)
                 <tr>
                     <td>{{ $student->id }}</td>
-                    <td>{{ $student->name }}</td>
+                    <td>{{ $student->first_name }}</td>
+                    <td>{{ $student->last_name }}</td>
                     <td>{{ $student->email }}</td>
-                    <td>{{ $student->age }}</td>
                     <td>{{ $student->course }}</td>
+                    <td>{{ $student->year_level }}</td>
                     <td>
                         <a href="{{ route('students.show', $student->id) }}">View</a>
                         <a href="{{ route('students.edit', $student->id) }}">Edit</a>
@@ -45,7 +47,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6">No students found.</td>
+                    <td colspan="7">No students found.</td>
                 </tr>
             @endforelse
         </tbody>
