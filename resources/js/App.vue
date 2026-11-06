@@ -1,11 +1,13 @@
 <template>
   <div class="min-h-screen bg-slate-100 text-slate-800 p-4 sm:p-6 lg:p-8">
     <div class="max-w-6xl mx-auto">
-      <!-- Navbar Component -->
+      <!-- Navbar Component showing User Profile & Logout -->
       <Navbar
         title="Student Management System"
-        subtitle="Final Lab Activity 3 • Full RESTful Vue 3 CRUD"
+        subtitle="Laravel Sanctum Bearer Authentication • Role-Based Access Control"
         :user="currentUser"
+        :logout-loading="logoutLoading"
+        @logout="handleLogout"
       />
 
       <!-- Success Notification Banner -->
@@ -52,140 +54,89 @@
         </button>
       </div>
 
-      <!-- Authentication Section if Sanctum Token needed -->
-      <div v-if="!isAuthenticated" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-lg font-bold text-slate-800">API Authentication</h2>
-            <p class="text-xs text-slate-500">
-              Sign in with your seeded credentials to access the protected <code class="bg-slate-100 px-1 py-0.5 rounded font-mono text-indigo-600">/api/students</code> endpoints.
-            </p>
+      <!-- Vue Login Interface (when not authenticated) -->
+      <LoginForm
+        v-if="!isAuthenticated"
+        :loading="authLoading"
+        :error-message="authError"
+        @login="handleLogin"
+      />
+
+      <!-- Protected Content (when authenticated with Bearer token) -->
+      <div v-else>
+        <!-- Authenticated Token & Role Status Banner -->
+        <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-3.5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div class="flex items-center gap-2.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100"></span>
+            <span class="text-slate-700 font-medium">
+              Sanctum Bearer Token Active • User:
+              <strong class="text-indigo-900 font-bold">{{ currentUser?.name }}</strong>
+              <span
+                class="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                :class="isAdmin ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300'"
+              >
+                {{ currentUser?.role }}
+              </span>
+              <span v-if="isAdmin" class="text-emerald-700 font-semibold ml-1.5">
+                (Full CRUD Access)
+              </span>
+              <span v-else class="text-slate-500 font-medium ml-1.5">
+                (Read-Only: Admin required for Add/Edit/Delete)
+              </span>
+            </span>
           </div>
-          <div class="text-xs bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-medium">
-            Sanctum Protected
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] text-slate-400 font-mono">Token: {{ maskedToken }}</span>
+            <button
+              type="button"
+              @click="handleLogout"
+              :disabled="logoutLoading"
+              class="text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline"
+            >
+              Revoke Token
+            </button>
           </div>
         </div>
 
-        <form @submit.prevent="handleLogin" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Email</label>
-            <input
-              v-model="loginForm.email"
-              type="email"
-              required
-              class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="admin@example.com"
-            />
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Password</label>
-            <input
-              v-model="loginForm.password"
-              type="password"
-              required
-              class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="password"
-            />
-          </div>
-          <div class="flex items-end gap-2">
-            <button
-              type="submit"
-              :disabled="authLoading"
-              class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm py-2 px-4 rounded-lg shadow-sm transition-colors disabled:opacity-50"
-            >
-              <span v-if="authLoading">Signing In...</span>
-              <span v-else>Sign In</span>
-            </button>
-            <button
-              type="button"
-              @click="quickLogin('admin')"
-              class="px-3 py-2 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-200"
-              title="Auto-fill admin credentials"
-            >
-              Admin
-            </button>
-            <button
-              type="button"
-              @click="quickLogin('user')"
-              class="px-3 py-2 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-200"
-              title="Auto-fill regular user credentials"
-            >
-              User
-            </button>
-          </div>
-        </form>
+        <!-- Dashboard Stats Cards -->
+        <StatsCard :stats="statCardsData" />
 
-        <p v-if="authError" class="text-xs font-medium text-rose-600 mt-2">
-          {{ authError }}
-        </p>
+        <!-- Student Records Management Table -->
+        <StudentList
+          :students="filteredStudents"
+          :loading="loading"
+          :error="errorMessage"
+          :course-options="courseOptions"
+          :can-manage="isAdmin"
+          v-model:searchQuery="searchQuery"
+          v-model:selectedCourse="selectedCourse"
+          @refresh="fetchStudents"
+          @create="openCreateModal"
+          @edit="openEditModal"
+          @delete="openDeleteModal"
+        />
+
+        <!-- Create / Edit Student Modal -->
+        <StudentModal
+          :is-open="isFormModalOpen"
+          :student="selectedStudent"
+          :loading="formSubmitting"
+          :server-errors="formErrors"
+          :server-error="modalError"
+          @close="closeFormModal"
+          @submit="handleSaveStudent"
+        />
+
+        <!-- Delete Confirmation Modal -->
+        <ConfirmDeleteModal
+          :is-open="isDeleteModalOpen"
+          :student="studentToDelete"
+          :loading="deleteLoading"
+          :error="deleteError"
+          @close="closeDeleteModal"
+          @confirm="handleConfirmDelete"
+        />
       </div>
-
-      <div v-else class="bg-indigo-50 border border-indigo-200 rounded-xl p-3 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-        <div class="flex items-center gap-2">
-          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200"></span>
-          <span class="text-slate-700 font-medium">
-            Signed in as
-            <strong class="text-indigo-900">{{ currentUser?.name }}</strong>
-            <span
-              class="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
-              :class="isAdmin ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-slate-200 text-slate-700'"
-            >
-              {{ currentUser?.role }}
-            </span>
-            <span v-if="isAdmin" class="text-emerald-700 font-medium ml-1">
-              (Full CRUD Access)
-            </span>
-            <span v-else class="text-slate-500 font-medium ml-1">
-              (Read-Only: Admin required for Add/Edit/Delete)
-            </span>
-          </span>
-        </div>
-        <button
-          @click="handleLogout"
-          class="text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline"
-        >
-          Sign Out / Clear Token
-        </button>
-      </div>
-
-      <!-- Stats Cards Component Demonstrating Props & v-for -->
-      <StatsCard :stats="statCardsData" />
-
-      <!-- Student List Component with Create/Edit/Delete events -->
-      <StudentList
-        :students="filteredStudents"
-        :loading="loading"
-        :error="errorMessage"
-        :course-options="courseOptions"
-        :can-manage="isAdmin"
-        v-model:searchQuery="searchQuery"
-        v-model:selectedCourse="selectedCourse"
-        @refresh="fetchStudents"
-        @create="openCreateModal"
-        @edit="openEditModal"
-        @delete="openDeleteModal"
-      />
-
-      <!-- Create / Edit Modal -->
-      <StudentModal
-        :is-open="isFormModalOpen"
-        :student="selectedStudent"
-        :loading="formSubmitting"
-        :server-errors="formErrors"
-        :server-error="modalError"
-        @close="closeFormModal"
-        @submit="handleSaveStudent"
-      />
-
-      <!-- Delete Confirmation Modal -->
-      <ConfirmDeleteModal
-        :is-open="isDeleteModalOpen"
-        :student="studentToDelete"
-        :loading="deleteLoading"
-        :error="deleteError"
-        @close="closeDeleteModal"
-        @confirm="handleConfirmDelete"
-      />
     </div>
   </div>
 </template>
@@ -193,19 +144,38 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import Navbar from './components/Navbar.vue'
+import LoginForm from './components/LoginForm.vue'
 import StatsCard from './components/StatsCard.vue'
 import StudentList from './components/StudentList.vue'
 import StudentModal from './components/StudentModal.vue'
 import ConfirmDeleteModal from './components/ConfirmDeleteModal.vue'
 
+// Authentication State
+const token = ref(localStorage.getItem('api_token') || '')
+const currentUser = ref(
+  localStorage.getItem('api_user')
+    ? JSON.parse(localStorage.getItem('api_user'))
+    : null
+)
+const isAuthenticated = computed(() => Boolean(token.value))
+const isAdmin = computed(() => currentUser.value?.role === 'admin')
+const maskedToken = computed(() => {
+  if (!token.value) return ''
+  return token.value.slice(0, 10) + '...' + token.value.slice(-6)
+})
+
+const authLoading = ref(false)
+const authError = ref(null)
+const logoutLoading = ref(false)
+
+// Student Data State
 const students = ref([])
 const loading = ref(false)
 const errorMessage = ref(null)
-
 const searchQuery = ref('')
 const selectedCourse = ref('')
 
-// Toast / Notification states
+// Toast Notification Banners
 const successMessage = ref(null)
 const globalError = ref(null)
 
@@ -228,36 +198,14 @@ const showError = (msg) => {
   }, 5000)
 }
 
-// Authentication
-const token = ref(localStorage.getItem('api_token') || '')
-const currentUser = ref(
-  localStorage.getItem('api_user')
-    ? JSON.parse(localStorage.getItem('api_user'))
-    : null
-)
-const isAuthenticated = computed(() => Boolean(token.value))
-const isAdmin = computed(() => currentUser.value?.role === 'admin')
-
-const loginForm = ref({
-  email: 'admin@example.com',
-  password: 'password',
-})
-const authLoading = ref(false)
-const authError = ref(null)
-
-const quickLogin = (type) => {
-  if (type === 'admin') {
-    loginForm.value.email = 'admin@example.com'
-    loginForm.value.password = 'password'
-  } else {
-    loginForm.value.email = 'user@example.com'
-    loginForm.value.password = 'password'
-  }
-}
-
-const handleLogin = async () => {
+/**
+ * Connect to existing Laravel /api/login endpoint
+ * Validates credentials, retrieves token and user info, stores them in localStorage
+ */
+const handleLogin = async (credentials) => {
   authLoading.value = true
   authError.value = null
+
   try {
     const res = await fetch('/api/login', {
       method: 'POST',
@@ -265,14 +213,20 @@ const handleLogin = async () => {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(loginForm.value),
+      body: JSON.stringify(credentials),
     })
 
     const data = await res.json()
+
     if (!res.ok) {
-      throw new Error(data.message || 'Login failed. Please check credentials.')
+      if (res.status === 422 && data.errors) {
+        const firstField = Object.keys(data.errors)[0]
+        throw new Error(data.errors[firstField][0] || 'Validation error.')
+      }
+      throw new Error(data.message || 'Login failed. Please check your credentials.')
     }
 
+    // Store retrieved Bearer token and user info with role
     token.value = data.token
     currentUser.value = data.user
     localStorage.setItem('api_token', data.token)
@@ -281,13 +235,19 @@ const handleLogin = async () => {
     showSuccess(`Signed in successfully as ${data.user.name} (${data.user.role}).`)
     await fetchStudents()
   } catch (err) {
-    authError.value = err.message
+    authError.value = err.message || 'Unable to connect to authentication server.'
   } finally {
     authLoading.value = false
   }
 }
 
+/**
+ * Connect to existing Laravel /api/logout endpoint
+ * Revokes current Bearer token from personal_access_tokens and clears localStorage
+ */
 const handleLogout = async () => {
+  logoutLoading.value = true
+
   try {
     if (token.value) {
       await fetch('/api/logout', {
@@ -298,19 +258,23 @@ const handleLogout = async () => {
         },
       })
     }
-  } catch {
-    // Ignore error
+  } catch (err) {
+    console.error('Logout error:', err)
   } finally {
+    // Clear state & storage regardless
     token.value = ''
     currentUser.value = null
     students.value = []
     localStorage.removeItem('api_token')
     localStorage.removeItem('api_user')
-    showSuccess('Signed out and cleared API token.')
+    logoutLoading.value = false
+    showSuccess('Token revoked. Signed out successfully.')
   }
 }
 
-// Student Fetching
+/**
+ * Fetch students using Sanctum Bearer token
+ */
 const fetchStudents = async () => {
   if (!token.value) {
     errorMessage.value = 'Please sign in to fetch student records.'
@@ -329,7 +293,12 @@ const fetchStudents = async () => {
     })
 
     const payload = await res.json()
+
     if (!res.ok) {
+      if (res.status === 401) {
+        handleLogout()
+        throw new Error('Your session has expired. Please sign in again.')
+      }
       throw new Error(payload.message || `API error: ${res.statusText}`)
     }
 
@@ -404,13 +373,13 @@ const handleSaveStudent = async ({ isEditing, id, data }) => {
       } else if (res.status === 403) {
         throw new Error(result.message || 'Forbidden: Administrator privileges required.')
       } else if (res.status === 401) {
+        handleLogout()
         throw new Error('Unauthenticated: Your session has expired. Please sign in again.')
       } else {
         throw new Error(result.message || 'An unexpected error occurred while saving.')
       }
     }
 
-    // Refresh and notify
     await fetchStudents()
     closeFormModal()
     showSuccess(
@@ -462,7 +431,7 @@ const handleConfirmDelete = async (student) => {
 
     if (!res.ok) {
       if (res.status === 403) {
-        throw new Error(result.message || 'Forbidden: Administrator privileges required to delete.')
+        throw new Error(result.message || 'Forbidden: Administrator privileges required.')
       } else {
         throw new Error(result.message || 'Failed to delete student record.')
       }
@@ -478,7 +447,7 @@ const handleConfirmDelete = async (student) => {
   }
 }
 
-// Course options derived dynamically from records
+// Derived Courses for dropdown
 const courseOptions = computed(() => {
   const set = new Set()
   students.value.forEach((s) => {
@@ -487,7 +456,7 @@ const courseOptions = computed(() => {
   return Array.from(set).sort()
 })
 
-// Filtered students by search & course filter
+// Filtered student list
 const filteredStudents = computed(() => {
   return students.value.filter((student) => {
     const matchesSearch =
@@ -508,7 +477,7 @@ const filteredStudents = computed(() => {
   })
 })
 
-// Computed stats
+// Dashboard Stats Data
 const statCardsData = computed(() => {
   const total = students.value.length
   const coursesCount = courseOptions.value.length
