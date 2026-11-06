@@ -1,21 +1,23 @@
 <template>
   <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-    <!-- Search / Filter header -->
-    <div class="p-4 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-      <div class="relative flex-1 max-w-sm">
-        <input
-          :value="searchQuery"
-          @input="$emit('update:searchQuery', $event.target.value)"
-          type="text"
-          placeholder="Search by name, email, or Student ID..."
-          class="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-        />
-        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
-        </svg>
-      </div>
+    <!-- Header with Search, Filter & Add Student Button -->
+    <div class="p-4 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+      <div class="flex flex-col sm:flex-row gap-2 flex-1 max-w-lg">
+        <!-- Search bar -->
+        <div class="relative flex-1">
+          <input
+            :value="searchQuery"
+            @input="$emit('update:searchQuery', $event.target.value)"
+            type="text"
+            placeholder="Search by name, email, or Student ID..."
+            class="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+          />
+          <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+          </svg>
+        </div>
 
-      <div class="flex items-center gap-2">
+        <!-- Course filter -->
         <select
           :value="selectedCourse"
           @change="$emit('update:selectedCourse', $event.target.value)"
@@ -26,7 +28,10 @@
             {{ course }}
           </option>
         </select>
+      </div>
 
+      <!-- Actions: Refresh & Add Student Button -->
+      <div class="flex items-center gap-2">
         <button
           @click="$emit('refresh')"
           class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
@@ -36,6 +41,17 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           Refresh
+        </button>
+
+        <button
+          v-if="canManage"
+          @click="$emit('create')"
+          class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          Add Student
         </button>
       </div>
     </div>
@@ -50,7 +66,7 @@
             <th scope="col" class="py-3.5 px-4">Email</th>
             <th scope="col" class="py-3.5 px-4">Course</th>
             <th scope="col" class="py-3.5 px-4 text-center">Year Level</th>
-            <th scope="col" class="py-3.5 px-4 text-right">Registered</th>
+            <th scope="col" class="py-3.5 px-4 text-right">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-200 bg-white text-slate-700">
@@ -88,6 +104,13 @@
               </svg>
               <p class="text-base font-semibold text-slate-600">No students found</p>
               <p class="text-xs text-slate-400 mt-1">There are no matching student records in the database.</p>
+              <button
+                v-if="canManage"
+                @click="$emit('create')"
+                class="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200 transition-colors"
+              >
+                + Register First Student
+              </button>
             </td>
           </tr>
 
@@ -96,7 +119,7 @@
             v-else
             v-for="(student, index) in students"
             :key="student.id || index"
-            class="hover:bg-indigo-50/40 transition-colors"
+            class="hover:bg-indigo-50/40 transition-colors group"
           >
             <td class="py-3.5 px-4 font-mono text-xs font-semibold text-indigo-700">
               {{ student.Student_id || 'N/A' }}
@@ -122,8 +145,30 @@
                 {{ student.year_level }}
               </span>
             </td>
-            <td class="py-3.5 px-4 text-right text-xs text-slate-500 font-mono">
-              {{ formatDate(student.created_at) }}
+            <td class="py-3.5 px-4 text-right">
+              <!-- Admin actions -->
+              <div v-if="canManage" class="inline-flex items-center gap-1.5">
+                <button
+                  type="button"
+                  @click="$emit('edit', student)"
+                  class="px-2.5 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md transition-colors"
+                  title="Edit record"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  @click="$emit('delete', student)"
+                  class="px-2.5 py-1 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md transition-colors"
+                  title="Delete record"
+                >
+                  Delete
+                </button>
+              </div>
+              <!-- Read-only badge for regular users -->
+              <span v-else class="text-[11px] text-slate-400 font-medium italic">
+                Read-only
+              </span>
             </td>
           </tr>
         </tbody>
@@ -136,7 +181,7 @@
         Showing <strong class="font-semibold text-slate-700">{{ students.length }}</strong> student record(s)
       </span>
       <span class="text-[11px] text-slate-400">
-        Milestone 1 • Read-Only Display
+        Milestone 2 • Full Student CRUD
       </span>
     </div>
   </div>
@@ -169,9 +214,13 @@ defineProps({
     type: Array,
     default: () => [],
   },
+  canManage: {
+    type: Boolean,
+    default: false,
+  },
 })
 
-defineEmits(['update:searchQuery', 'update:selectedCourse', 'refresh'])
+defineEmits(['update:searchQuery', 'update:selectedCourse', 'refresh', 'create', 'edit', 'delete'])
 
 const getYearBadgeClass = (year) => {
   const level = Number(year)
@@ -188,19 +237,4 @@ const getYearBadgeClass = (year) => {
       return 'bg-slate-100 text-slate-700'
   }
 }
-
-const formatDate = (dateString) => {
-  if (!dateString) return '—'
-  try {
-    const d = new Date(dateString)
-    return d.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
-  } catch {
-    return dateString
-  }
-}
 </script>
-

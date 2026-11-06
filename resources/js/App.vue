@@ -1,12 +1,56 @@
 <template>
   <div class="min-h-screen bg-slate-100 text-slate-800 p-4 sm:p-6 lg:p-8">
     <div class="max-w-6xl mx-auto">
-      <!-- Navbar Component Demonstrating Props -->
+      <!-- Navbar Component -->
       <Navbar
         title="Student Management System"
-        subtitle="Final Lab Activity 3 • Vue.js 3 + Laravel REST API"
+        subtitle="Final Lab Activity 3 • Full RESTful Vue 3 CRUD"
         :user="currentUser"
       />
+
+      <!-- Success Notification Banner -->
+      <div
+        v-if="successMessage"
+        class="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2 duration-150"
+      >
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span class="text-sm font-medium">{{ successMessage }}</span>
+        </div>
+        <button
+          type="button"
+          @click="successMessage = null"
+          class="text-emerald-500 hover:text-emerald-700 p-1"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Error Notification Banner -->
+      <div
+        v-if="globalError"
+        class="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2 duration-150"
+      >
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span class="text-sm font-medium">{{ globalError }}</span>
+        </div>
+        <button
+          type="button"
+          @click="globalError = null"
+          class="text-rose-500 hover:text-rose-700 p-1"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
 
       <!-- Authentication Section if Sanctum Token needed -->
       <div v-if="!isAuthenticated" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
@@ -14,7 +58,7 @@
           <div>
             <h2 class="text-lg font-bold text-slate-800">API Authentication</h2>
             <p class="text-xs text-slate-500">
-              Sign in with your seeded credentials to query the protected <code class="bg-slate-100 px-1 py-0.5 rounded font-mono text-indigo-600">/api/students</code> endpoint.
+              Sign in with your seeded credentials to access the protected <code class="bg-slate-100 px-1 py-0.5 rounded font-mono text-indigo-600">/api/students</code> endpoints.
             </p>
           </div>
           <div class="text-xs bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-medium">
@@ -76,13 +120,24 @@
         </p>
       </div>
 
-      <div v-else class="bg-indigo-50 border border-indigo-200 rounded-xl p-3 mb-6 flex items-center justify-between text-xs">
+      <div v-else class="bg-indigo-50 border border-indigo-200 rounded-xl p-3 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
         <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200"></span>
           <span class="text-slate-700 font-medium">
-            Authenticated via Sanctum Bearer Token as
+            Signed in as
             <strong class="text-indigo-900">{{ currentUser?.name }}</strong>
-            ({{ currentUser?.role }})
+            <span
+              class="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+              :class="isAdmin ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-slate-200 text-slate-700'"
+            >
+              {{ currentUser?.role }}
+            </span>
+            <span v-if="isAdmin" class="text-emerald-700 font-medium ml-1">
+              (Full CRUD Access)
+            </span>
+            <span v-else class="text-slate-500 font-medium ml-1">
+              (Read-Only: Admin required for Add/Edit/Delete)
+            </span>
           </span>
         </div>
         <button
@@ -96,15 +151,40 @@
       <!-- Stats Cards Component Demonstrating Props & v-for -->
       <StatsCard :stats="statCardsData" />
 
-      <!-- Student List Component Demonstrating Props, v-for, and v-if -->
+      <!-- Student List Component with Create/Edit/Delete events -->
       <StudentList
         :students="filteredStudents"
         :loading="loading"
         :error="errorMessage"
         :course-options="courseOptions"
+        :can-manage="isAdmin"
         v-model:searchQuery="searchQuery"
         v-model:selectedCourse="selectedCourse"
         @refresh="fetchStudents"
+        @create="openCreateModal"
+        @edit="openEditModal"
+        @delete="openDeleteModal"
+      />
+
+      <!-- Create / Edit Modal -->
+      <StudentModal
+        :is-open="isFormModalOpen"
+        :student="selectedStudent"
+        :loading="formSubmitting"
+        :server-errors="formErrors"
+        :server-error="modalError"
+        @close="closeFormModal"
+        @submit="handleSaveStudent"
+      />
+
+      <!-- Delete Confirmation Modal -->
+      <ConfirmDeleteModal
+        :is-open="isDeleteModalOpen"
+        :student="studentToDelete"
+        :loading="deleteLoading"
+        :error="deleteError"
+        @close="closeDeleteModal"
+        @confirm="handleConfirmDelete"
       />
     </div>
   </div>
@@ -115,6 +195,8 @@ import { ref, computed, onMounted } from 'vue'
 import Navbar from './components/Navbar.vue'
 import StatsCard from './components/StatsCard.vue'
 import StudentList from './components/StudentList.vue'
+import StudentModal from './components/StudentModal.vue'
+import ConfirmDeleteModal from './components/ConfirmDeleteModal.vue'
 
 const students = ref([])
 const loading = ref(false)
@@ -123,6 +205,30 @@ const errorMessage = ref(null)
 const searchQuery = ref('')
 const selectedCourse = ref('')
 
+// Toast / Notification states
+const successMessage = ref(null)
+const globalError = ref(null)
+
+const showSuccess = (msg) => {
+  successMessage.value = msg
+  globalError.value = null
+  setTimeout(() => {
+    if (successMessage.value === msg) {
+      successMessage.value = null
+    }
+  }, 4000)
+}
+
+const showError = (msg) => {
+  globalError.value = msg
+  setTimeout(() => {
+    if (globalError.value === msg) {
+      globalError.value = null
+    }
+  }, 5000)
+}
+
+// Authentication
 const token = ref(localStorage.getItem('api_token') || '')
 const currentUser = ref(
   localStorage.getItem('api_user')
@@ -130,6 +236,7 @@ const currentUser = ref(
     : null
 )
 const isAuthenticated = computed(() => Boolean(token.value))
+const isAdmin = computed(() => currentUser.value?.role === 'admin')
 
 const loginForm = ref({
   email: 'admin@example.com',
@@ -171,6 +278,7 @@ const handleLogin = async () => {
     localStorage.setItem('api_token', data.token)
     localStorage.setItem('api_user', JSON.stringify(data.user))
 
+    showSuccess(`Signed in successfully as ${data.user.name} (${data.user.role}).`)
     await fetchStudents()
   } catch (err) {
     authError.value = err.message
@@ -191,16 +299,18 @@ const handleLogout = async () => {
       })
     }
   } catch {
-    // Ignore error on network cleanup
+    // Ignore error
   } finally {
     token.value = ''
     currentUser.value = null
     students.value = []
     localStorage.removeItem('api_token')
     localStorage.removeItem('api_user')
+    showSuccess('Signed out and cleared API token.')
   }
 }
 
+// Student Fetching
 const fetchStudents = async () => {
   if (!token.value) {
     errorMessage.value = 'Please sign in to fetch student records.'
@@ -223,7 +333,6 @@ const fetchStudents = async () => {
       throw new Error(payload.message || `API error: ${res.statusText}`)
     }
 
-    // Handle both { data: [...] } format and raw array format
     if (Array.isArray(payload)) {
       students.value = payload
     } else if (payload && Array.isArray(payload.data)) {
@@ -235,6 +344,137 @@ const fetchStudents = async () => {
     errorMessage.value = err.message || 'Failed to connect to the Laravel REST API.'
   } finally {
     loading.value = false
+  }
+}
+
+// Modal States: Create / Edit
+const isFormModalOpen = ref(false)
+const selectedStudent = ref(null)
+const formSubmitting = ref(false)
+const formErrors = ref({})
+const modalError = ref(null)
+
+const openCreateModal = () => {
+  selectedStudent.value = null
+  formErrors.value = {}
+  modalError.value = null
+  isFormModalOpen.value = true
+}
+
+const openEditModal = (student) => {
+  selectedStudent.value = { ...student }
+  formErrors.value = {}
+  modalError.value = null
+  isFormModalOpen.value = true
+}
+
+const closeFormModal = () => {
+  if (formSubmitting.value) return
+  isFormModalOpen.value = false
+  selectedStudent.value = null
+  formErrors.value = {}
+  modalError.value = null
+}
+
+const handleSaveStudent = async ({ isEditing, id, data }) => {
+  formSubmitting.value = true
+  formErrors.value = {}
+  modalError.value = null
+
+  const endpoint = isEditing ? `/api/students/${id}` : '/api/students'
+  const method = isEditing ? 'PUT' : 'POST'
+
+  try {
+    const res = await fetch(endpoint, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token.value}`,
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(data),
+    })
+
+    const result = await res.json()
+
+    if (!res.ok) {
+      if (res.status === 422 && result.errors) {
+        formErrors.value = result.errors
+        throw new Error('Please correct the validation errors in the form.')
+      } else if (res.status === 403) {
+        throw new Error(result.message || 'Forbidden: Administrator privileges required.')
+      } else if (res.status === 401) {
+        throw new Error('Unauthenticated: Your session has expired. Please sign in again.')
+      } else {
+        throw new Error(result.message || 'An unexpected error occurred while saving.')
+      }
+    }
+
+    // Refresh and notify
+    await fetchStudents()
+    closeFormModal()
+    showSuccess(
+      isEditing
+        ? `Student #${data.Student_id} updated successfully.`
+        : `Student #${data.Student_id} registered successfully.`
+    )
+  } catch (err) {
+    modalError.value = err.message
+  } finally {
+    formSubmitting.value = false
+  }
+}
+
+// Modal States: Delete
+const isDeleteModalOpen = ref(false)
+const studentToDelete = ref(null)
+const deleteLoading = ref(false)
+const deleteError = ref(null)
+
+const openDeleteModal = (student) => {
+  studentToDelete.value = student
+  deleteError.value = null
+  isDeleteModalOpen.value = true
+}
+
+const closeDeleteModal = () => {
+  if (deleteLoading.value) return
+  isDeleteModalOpen.value = false
+  studentToDelete.value = null
+  deleteError.value = null
+}
+
+const handleConfirmDelete = async (student) => {
+  if (!student || !student.id) return
+  deleteLoading.value = true
+  deleteError.value = null
+
+  try {
+    const res = await fetch(`/api/students/${student.id}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token.value}`,
+        Accept: 'application/json',
+      },
+    })
+
+    const result = await res.json()
+
+    if (!res.ok) {
+      if (res.status === 403) {
+        throw new Error(result.message || 'Forbidden: Administrator privileges required to delete.')
+      } else {
+        throw new Error(result.message || 'Failed to delete student record.')
+      }
+    }
+
+    await fetchStudents()
+    closeDeleteModal()
+    showSuccess(`Student ${student.first_name} ${student.last_name} deleted successfully.`)
+  } catch (err) {
+    deleteError.value = err.message
+  } finally {
+    deleteLoading.value = false
   }
 }
 
@@ -268,7 +508,7 @@ const filteredStudents = computed(() => {
   })
 })
 
-// Computed stats demonstrating reactive calculations
+// Computed stats
 const statCardsData = computed(() => {
   const total = students.value.length
   const coursesCount = courseOptions.value.length
@@ -313,4 +553,3 @@ onMounted(() => {
   }
 })
 </script>
-
