@@ -149,20 +149,19 @@ import StatsCard from './components/StatsCard.vue'
 import StudentList from './components/StudentList.vue'
 import StudentModal from './components/StudentModal.vue'
 import ConfirmDeleteModal from './components/ConfirmDeleteModal.vue'
+import { useAuth } from './composables/useAuth'
+import { api, ApiError } from './services/api'
 
-// Authentication State
-const token = ref(localStorage.getItem('api_token') || '')
-const currentUser = ref(
-  localStorage.getItem('api_user')
-    ? JSON.parse(localStorage.getItem('api_user'))
-    : null
-)
-const isAuthenticated = computed(() => Boolean(token.value))
-const isAdmin = computed(() => currentUser.value?.role === 'admin')
-const maskedToken = computed(() => {
-  if (!token.value) return ''
-  return token.value.slice(0, 10) + '...' + token.value.slice(-6)
-})
+// Shared Authentication State from Composable
+const {
+  token,
+  currentUser,
+  isAuthenticated,
+  isAdmin,
+  maskedToken,
+  login,
+  logout,
+} = useAuth()
 
 const authLoading = ref(false)
 const authError = ref(null)
@@ -199,39 +198,14 @@ const showError = (msg) => {
 }
 
 /**
- * Connect to existing Laravel /api/login endpoint
- * Validates credentials, retrieves token and user info, stores them in localStorage
+ * Handle user login via useAuth composable
  */
 const handleLogin = async (credentials) => {
   authLoading.value = true
   authError.value = null
 
   try {
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(credentials),
-    })
-
-    const data = await res.json()
-
-    if (!res.ok) {
-      if (res.status === 422 && data.errors) {
-        const firstField = Object.keys(data.errors)[0]
-        throw new Error(data.errors[firstField][0] || 'Validation error.')
-      }
-      throw new Error(data.message || 'Login failed. Please check your credentials.')
-    }
-
-    // Store retrieved Bearer token and user info with role
-    token.value = data.token
-    currentUser.value = data.user
-    localStorage.setItem('api_token', data.token)
-    localStorage.setItem('api_user', JSON.stringify(data.user))
-
+    const data = await login(credentials)
     showSuccess(`Signed in successfully as ${data.user.name} (${data.user.role}).`)
     await fetchStudents()
   } catch (err) {
@@ -242,41 +216,27 @@ const handleLogin = async (credentials) => {
 }
 
 /**
- * Connect to existing Laravel /api/logout endpoint
- * Revokes current Bearer token from personal_access_tokens and clears localStorage
+ * Handle user logout via useAuth composable
  */
 const handleLogout = async () => {
   logoutLoading.value = true
 
   try {
-    if (token.value) {
-      await fetch('/api/logout', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token.value}`,
-          Accept: 'application/json',
-        },
-      })
-    }
+    await logout()
+    students.value = []
+    showSuccess('Token revoked. Signed out successfully.')
   } catch (err) {
     console.error('Logout error:', err)
   } finally {
-    // Clear state & storage regardless
-    token.value = ''
-    currentUser.value = null
-    students.value = []
-    localStorage.removeItem('api_token')
-    localStorage.removeItem('api_user')
     logoutLoading.value = false
-    showSuccess('Token revoked. Signed out successfully.')
   }
 }
 
 /**
- * Fetch students using Sanctum Bearer token
+ * Fetch students using centralized api client
  */
 const fetchStudents = async () => {
-  if (!token.value) {
+  if (!isAuthenticated.value) {
     errorMessage.value = 'Please sign in to fetch student records.'
     return
   }
@@ -285,22 +245,7 @@ const fetchStudents = async () => {
   errorMessage.value = null
 
   try {
-    const res = await fetch('/api/students', {
-      headers: {
-        Authorization: `Bearer ${token.value}`,
-        Accept: 'application/json',
-      },
-    })
-
-    const payload = await res.json()
-
-    if (!res.ok) {
-      if (res.status === 401) {
-        handleLogout()
-        throw new Error('Your session has expired. Please sign in again.')
-      }
-      throw new Error(payload.message || `API error: ${res.statusText}`)
-    }
+    const payload = await api.get('/api/students')
 
     if (Array.isArray(payload)) {
       students.value = payload
@@ -310,7 +255,11 @@ const fetchStudents = async () => {
       students.value = []
     }
   } catch (err) {
-    errorMessage.value = err.message || 'Failed to connect to the Laravel REST API.'
+    if (err instanceof ApiError && err.status === 401) {
+      showError('Your session has expired. Please sign in again.')
+    } else {
+      errorMessage.value = err.message || 'Failed to connect to the Laravel REST API.'
+    }
   } finally {
     loading.value = false
   }
@@ -350,34 +299,11 @@ const handleSaveStudent = async ({ isEditing, id, data }) => {
   formErrors.value = {}
   modalError.value = null
 
-  const endpoint = isEditing ? `/api/students/${id}` : '/api/students'
-  const method = isEditing ? 'PUT' : 'POST'
-
   try {
-    const res = await fetch(endpoint, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token.value}`,
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(data),
-    })
-
-    const result = await res.json()
-
-    if (!res.ok) {
-      if (res.status === 422 && result.errors) {
-        formErrors.value = result.errors
-        throw new Error('Please correct the validation errors in the form.')
-      } else if (res.status === 403) {
-        throw new Error(result.message || 'Forbidden: Administrator privileges required.')
-      } else if (res.status === 401) {
-        handleLogout()
-        throw new Error('Unauthenticated: Your session has expired. Please sign in again.')
-      } else {
-        throw new Error(result.message || 'An unexpected error occurred while saving.')
-      }
+    if (isEditing) {
+      await api.put(`/api/students/${id}`, data)
+    } else {
+      await api.post('/api/students', data)
     }
 
     await fetchStudents()
@@ -388,7 +314,20 @@ const handleSaveStudent = async ({ isEditing, id, data }) => {
         : `Student #${data.Student_id} registered successfully.`
     )
   } catch (err) {
-    modalError.value = err.message
+    if (err instanceof ApiError) {
+      if (err.status === 422 && err.errors) {
+        formErrors.value = err.errors
+        modalError.value = 'Please correct the validation errors in the form.'
+      } else if (err.status === 403) {
+        modalError.value = err.message || 'Forbidden: Administrator privileges required.'
+      } else if (err.status === 401) {
+        modalError.value = 'Unauthenticated: Your session has expired. Please sign in again.'
+      } else {
+        modalError.value = err.message || 'An unexpected error occurred while saving.'
+      }
+    } else {
+      modalError.value = err.message || 'Network error while saving record.'
+    }
   } finally {
     formSubmitting.value = false
   }
@@ -419,29 +358,16 @@ const handleConfirmDelete = async (student) => {
   deleteError.value = null
 
   try {
-    const res = await fetch(`/api/students/${student.id}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${token.value}`,
-        Accept: 'application/json',
-      },
-    })
-
-    const result = await res.json()
-
-    if (!res.ok) {
-      if (res.status === 403) {
-        throw new Error(result.message || 'Forbidden: Administrator privileges required.')
-      } else {
-        throw new Error(result.message || 'Failed to delete student record.')
-      }
-    }
-
+    await api.delete(`/api/students/${student.id}`)
     await fetchStudents()
     closeDeleteModal()
     showSuccess(`Student ${student.first_name} ${student.last_name} deleted successfully.`)
   } catch (err) {
-    deleteError.value = err.message
+    if (err instanceof ApiError && err.status === 403) {
+      deleteError.value = err.message || 'Forbidden: Administrator privileges required.'
+    } else {
+      deleteError.value = err.message || 'Failed to delete student record.'
+    }
   } finally {
     deleteLoading.value = false
   }
@@ -517,7 +443,7 @@ const statCardsData = computed(() => {
 })
 
 onMounted(() => {
-  if (token.value) {
+  if (isAuthenticated.value) {
     fetchStudents()
   }
 })
